@@ -50,6 +50,18 @@ export class MyPromise<T> {
     })
   }
 
+  static resolve<Type1>(result: Type1): MyPromise<Type1> {
+    return new MyPromise((resolve, reject) => {
+      resolve(result)
+    })
+  }
+
+  static reject<Type2>(reason: Type2): MyPromise<Type2> {
+    return new MyPromise((resolve, reject) => {
+      reject(reason)
+    })
+  }
+
   _changeState(newState: 'fulfilled' | 'rejected', r: any): void {
     if (this._MyPromiseState == 'pending') {
       this._MyPromiseState = newState
@@ -68,22 +80,39 @@ export class MyPromise<T> {
     const exefn = state === 'fulfilled' ? onFulfilled : onRejected
     queueMicrotask(() => {
       try {
-        resolve(exefn(this._MyPromiseResult))
+        let r = exefn(this._MyPromiseResult)
+        this._resolvePromise(r, resolve, reject)
       } catch (e) {
         reject(e)
       }
     })
   }
+
+  _resolvePromise(r: any, resolve: PromiseResolver<any>, reject: PromiseRejecter): void {
+    if (r instanceof MyPromise) {
+      r.then(resolve, reject)
+    } else {
+      resolve(r)
+    }
+  }
 }
 
 
 
-// let p = new Promise((resolve, reject) => {
+// var p = new MyPromise((resolve, reject) => {
 //   console.log(333)
 //   setTimeout(() => {
 //     reject(44)
 //     resolve(33)
 //   }, 1000)
 // }).then(() => 3333, () => 999)
+
+
+// var v = 99
+// var p0 = MyPromise.resolve(1000).then((r) => {
+//   v = r + v
+//   return MyPromise.resolve(v)
+// }, () => { })
+// console.log(v)
 
 
