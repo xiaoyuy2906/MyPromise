@@ -4,13 +4,13 @@ type PromiseResult = any
 type PromiseResolver<T> = (result: T) => void
 type PromiseRejecter = (reason: any) => void
 type PromiseExecutor<T> = (resolve: PromiseResolver<T>, reject: PromiseRejecter) => void
-type PromiseOnFulfiled<T, U> = (result: T) => U
+type PromiseOnFulfilled<T, U> = (result: T) => U
 type PromiseOnRejected<T> = (reason: any) => T
 interface PromiseMicroTask {
   resolve: PromiseResolver<any>
   reject: PromiseRejecter
-  onFulfilled: PromiseOnFulfiled<any, any>
-  onRejected: PromiseOnRejected<any>
+  onFulfilled?: PromiseOnFulfilled<any, any>
+  onRejected?: PromiseOnRejected<any>
 }
 
 export class MyPromise<T> {
@@ -32,32 +32,51 @@ export class MyPromise<T> {
     }
   }
 
-  then<U, V>(onFulfilled: PromiseOnFulfiled<T, U>, onRejected: PromiseOnRejected<V>): MyPromise<U | V> {
+  then<U, V>(onFulfilled?: PromiseOnFulfilled<T, U>,
+    onRejected?: PromiseOnRejected<V>): MyPromise<U | V | T> {
     return new MyPromise((resolve, reject) => {
       if (this._MyPromiseState == 'pending') {
         this._MyMicroTasks.push({
           resolve,
           reject,
           onFulfilled,
-          onRejected
+          onRejected,
         })
       } else {
         const task: PromiseMicroTask = {
-          resolve, reject, onFulfilled, onRejected
+          resolve,
+          reject,
+          onFulfilled,
+          onRejected,
         }
         this._runMicroTask(this._MyPromiseState, task)
       }
     })
   }
 
-  static resolve<Type1>(result: Type1): MyPromise<Type1> {
+  static resolve<Type1>(result: Type1): MyPromise<any> {
+    if (result instanceof MyPromise) {
+      return result
+    } 
     return new MyPromise((resolve, reject) => {
-      resolve(result)
+      if (
+        result !== null &&
+        (typeof result === 'object' || typeof result === 'function') &&
+        typeof (result as any).then === 'function'
+      ) {
+        try {
+          (result as any).then(resolve, reject)
+        } catch (e) {
+          reject(e)
+        }
+      } else {
+        resolve(result)
+      }
     })
   }
 
-  static reject<Type2>(reason: Type2): MyPromise<Type2> {
-    return new MyPromise((resolve, reject) => {
+  static reject(reason?: any): MyPromise<never> {
+    return new MyPromise<never>((_, reject) => {
       reject(reason)
     })
   }
@@ -77,7 +96,9 @@ export class MyPromise<T> {
 
   _runMicroTask(state: 'fulfilled' | 'rejected', microTask: PromiseMicroTask): void {
     const { resolve, reject, onFulfilled, onRejected } = microTask
-    const exefn = state === 'fulfilled' ? onFulfilled : onRejected
+    const exefn = state === 'fulfilled'
+      ? (onFulfilled ?? ((value: any) => value))
+      : (onRejected ?? ((reason: any) => { throw reason }))
     queueMicrotask(() => {
       try {
         let r = exefn(this._MyPromiseResult)
@@ -91,28 +112,22 @@ export class MyPromise<T> {
   _resolvePromise(r: any, resolve: PromiseResolver<any>, reject: PromiseRejecter): void {
     if (r instanceof MyPromise) {
       r.then(resolve, reject)
+      return
+    } else if (
+      r !== null && (typeof r === 'object' || typeof r === 'function') && typeof r.then === 'function'
+    ) {
+      try {
+        r.then(resolve, reject)
+      } catch (e) {
+        reject(e)
+      }
+      return
     } else {
       resolve(r)
     }
+    // The Promises/A+ spec (§2.3.3) requires any object or function with a callable `.then` method (a "thenable") to be assimilated.
   }
 }
 
-
-
-// var p = new MyPromise((resolve, reject) => {
-//   console.log(333)
-//   setTimeout(() => {
-//     reject(44)
-//     resolve(33)
-//   }, 1000)
-// }).then(() => 3333, () => 999)
-
-
-// var v = 99
-// var p0 = MyPromise.resolve(1000).then((r) => {
-//   v = r + v
-//   return MyPromise.resolve(v)
-// }, () => { })
-// console.log(v)
 
 
